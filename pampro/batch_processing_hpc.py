@@ -19,6 +19,7 @@ import pandas as pd
 from .pampro_utilities import *
 from itertools import repeat
 from multiprocessing import Pool, Lock, Process, Queue, current_process, cpu_count
+from mpi4py import MPI
 
 def batch_process(analysis_function, jobs_spec, job_num=1, num_jobs=1, task=None):
     """
@@ -161,6 +162,10 @@ def batch_process_wrapper(analysis_function, jobs_df, settings, job_num=1, num_j
         Also requires a settings dataframe that contains the logs folder path and submission id.
     """
 
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank() # get your process ID
+    nnode = comm.Get_size()
+
     task = analysis_function.__name__
 
     submission_id = settings.get("submission_id")[0]
@@ -177,10 +182,13 @@ def batch_process_wrapper(analysis_function, jobs_df, settings, job_num=1, num_j
 #>>> list(zip(['aaa','bbb','ccc'],repeat('opu'),repeat('klo')))
 #[('aaa', 'opu', 'klo'), ('bbb', 'opu', 'klo'), ('ccc', 'opu', 'klo')]
 #listsr = [j for i,j in df[0:3].iterrows()]
-    list_jobs_pandaseries  = [j for i,j in my_jobs.iterrows()] # collecting as a list of pandas series
-    print('type(list_jobs_pandaseries[0]) = ',type(list_jobs_pandaseries[0]))
-    print('index = ',list_jobs_pandaseries[0].index)
-    print('values = ',list_jobs_pandaseries[0].values)
+    #list_jobs_pandaseries  = [j for i,j in my_jobs.iterrows()] # collecting as a list of pandas series
+    all_list_jobs_pandaseries  = [j for i,j in my_jobs.iterrows()] # collecting as a list of pandas series
+    #print('type(list_jobs_pandaseries[0]) = ',type(list_jobs_pandaseries[0]))
+    #print('index = ',list_jobs_pandaseries[0].index)
+    #print('values = ',list_jobs_pandaseries[0].values)
+
+    list_jobs_pandaseries = all_list_jobs_pandaseries[rank::nnode]
 
     #with Pool(nprocs) as p:
     with Pool() as p:
@@ -195,6 +203,20 @@ def batch_process_wrapper(analysis_function, jobs_df, settings, job_num=1, num_j
        #    multiple_results.append[pool.apply_async(twos_multiple,(n,))]
            #print([res.get(timeout=1) for res in multiple_results])
 
+    #-----implementation with concurrent
+    #all_results = []
+    #max_workers = int(0.8*multiprocessing.cpu_count())
+    #with concurrent.futures.ProcessPoolExecutor(max_workers) as executor:
+    #   tasks = [executor.submit(my_awesome_function, sleep) for sleep in sleepTimes]
+    #
+    #   for ff in concurrent.futures.as_completed(tasks):
+    #       all_results.append(ff.result())
+
+    #with concurrent.futures.ProcessPoolExecutor(max_workers) as executor:
+    #    results = executor.map(my_awesome_function, sleepTimes) #if order of results matters
+    #
+    #    for result in results:
+    #        all_results.append(result)
 
 
 
