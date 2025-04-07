@@ -31,7 +31,7 @@ def files_to_process(settings):
     print('the number of all procesed files : ', len(logfunc))
 
     priorfunc = "qcdiagnostics"
-    inpfiles = glob.glob(log_folder + '/' + '*' + priorfunc  + '*.csv') #csv log filename  
+    inpfiles = glob.glob(log_folder + '/' + '*' + priorfunc  + '*comp*.csv') #csv log filename  
     inpfiles = [os.path.basename(file.split('_' + priorfunc  + '_')[0]) for file in inpfiles]
     inpfiles = set(inpfiles)
     print('the number of valid files that need processing: ', len(inpfiles))
