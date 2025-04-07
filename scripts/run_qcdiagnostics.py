@@ -17,12 +17,7 @@ import sys, os
 from pampro import data_loading, diagnostics, Time_Series, Channel, hdf5, channel_inference, Bout, Bout_Collection, batch_processing, triaxial_calibration, time_utilities, pampro_utilities, pampro_fourier
 from collections import OrderedDict
 import pandas as pd
-
-settings_file = str(sys.argv[1])
-jobs_file = str(sys.argv[2])
-group = str(sys.argv[3])
-job_num = int(sys.argv[4])
-num_jobs = int(sys.argv[5])
+from glob import glob
 
 #######################################################################################################################
 
@@ -40,11 +35,38 @@ anomaly_types = ["A", "B", "C", "D", "E", "F", "G"]     # A list of known anomal
 
 #########################################################################################################################
 
-def qcdiagnostics(job_details, settings):
 
-    pid = str(job_details["pid"])
-    filename = str(job_details["filename"])
+def files_to_process(settings):
+    func_name = "qcdiagnostics"
+    log_folder = settings.get("logs_folder")[0]
+    data_folder = settings.get("raw_data_folder")[0]
+    ext = settings.get("raw_file_extension")[0]
+    logfunc = glob.glob(log_folder + '/' + '*' + func_name  + '*.csv')
+    logfunc = [os.path.basename(file.split('_' + func_name + '_')[0]) for file in logfunc]
+    logfunc = set(logfunc)
+    datafiles = glob.glob(data_folder + '/*' + ext) #raw file *.cwa filename
+    inpfiles = set(datafiles)
+    ofiles = list(inpfiles - logfunc)
 
+    #folderconf = os.path.join(rootdir, config_folder)
+    if os.path.isdir(config_folder):
+        pass
+    else:
+        os.makedirs(config_folder, exist_ok=True)
+
+    if len(ofiles) > 0:
+         ofiles = [os.path.join(data_folder, x + ext) for x in ofiles]
+    else:
+      print('No more files to process !')
+      ofiles = None
+
+    return ofiles
+
+
+def qcdiagnostics(settings, filename, pid):
+
+    pid = str(pid)
+    filename = str(filename)
     filename_short = os.path.basename(filename).split('.')[0]
 
     monitor_type = settings.get("monitor_type")[0]
@@ -219,20 +241,35 @@ def qcdiagnostics(job_details, settings):
         qc_plots = None
     
     # change group and permissions of files
-    for f in [anomalies_file, qc_output, qc_plots]:
-        if f is not None:
-            os.system("chgrp {} {} & chmod 660 {}".format(group, f, f))
+    #for f in [anomalies_file, qc_output, qc_plots]:
+    #    if f is not None:
+    #        os.system("chgrp {} {} & chmod 660 {}".format(group, f, f))
     
     return {"anomalies_file": anomalies_file, "qc_results": qc_output, "qc_visualisation": qc_plots, "monitor": header["device"]}
 
 #######################################################################################################################
 
-# parse config file
-settings = pd.read_csv(settings_file, dtype=str)
+# # parse config file
+# settings = pd.read_csv(settings_file, dtype=str)
+# # parse jobs list file
+# jobs_df = pd.read_csv(jobs_file, dtype=str)
 
-# parse jobs list file
-jobs_df = pd.read_csv(jobs_file, dtype=str)
+# # initiate batch process
+# batch_processing.batch_process_wrapper(qcdiagnostics, jobs_df, settings, job_num, num_jobs)
 
-# initiate batch process
-batch_processing.batch_process_wrapper(qcdiagnostics, jobs_df, settings, job_num, num_jobs)
+if __name__ == "__main__":
+    # print the time taken to run the script
+    start_time = time.time()
+    print("Script started at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))    
 
+    settings_file = str(sys.argv[1])
+    # parse config file
+    settings = pd.read_csv(settings_file, dtype=str)
+
+    rawfiles = files_to_process(settings)
+    for i, rawfile in enumerate(rawfiles):
+        print("Processing file: {}".format(rawfile))
+        qcdiagnostics(settings, rawfile, i)
+
+    print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    print("Time taken: {:.2f} seconds".format(time.time() - start_time))
