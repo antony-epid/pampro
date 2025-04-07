@@ -49,6 +49,7 @@ def files_to_process(settings):
     ofiles = list(inpfiles - logfunc)
 
     #folderconf = os.path.join(rootdir, config_folder)
+    config_folder = settings.get("config_folder")[0]
     if os.path.isdir(config_folder):
         pass
     else:
