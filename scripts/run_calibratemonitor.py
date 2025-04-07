@@ -12,29 +12,34 @@
 
 from datetime import datetime
 import pandas as pd
-import sys
+import sys, time
 import os
 from pampro import data_loading, batch_processing, batch_processing_hpc, batch_processing_future, triaxial_calibration, pampro_utilities
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 
 today = datetime.now().strftime('%d%b%Y')
 
-job_num = int(sys.argv[3])
-num_jobs = int(sys.argv[4])
-settings_file = str(sys.argv[1])
-jobs_file = str(sys.argv[2])
-nprocs = sys.argv[5] if len(sys.argv) == 6 else 10
-
 #######################################################################################################################
 
+def files_to_process(settings):
+    rootdir = settings.get("project_root")[0]
+    sbfiles = [os.path.join(d, x) for d, dirs, files in os.walk(rootdir,followlinks=True) for x in files if os.path.basename(d) == '_stillbouts' ]
+    if len(sbfiles) > 0:
+      sbfiles.sort()
+    dictmon = defaultdict(lambda: [])
+    for file in sbfiles:
+        keymon = os.path.basename(file).split('_')[0]
+        dictmon[keymon].append(file)
+    #listmon = dictmon.keys()
+    #listsb = [dictmon[key] for key in listmon] #dictmon.keys() may not always follow the same order as dictmon.values()
+    return dictmon
 
-def calibratemonitor(job_details, settings):
+#def calibratemonitor(job_details, settings):
+def calibratemonitor(settings,monitor, files):    
 
     results_folder = settings.get("results_folder")[0]
-
-    monitor = job_details["monitor_id"]
-
-    files = (job_details["stillbouts_files"]).strip("[]").replace("'", "").replace(" ", "").split(",")
+    #monitor = job_details["monitor_id"]
+    #files = (job_details["stillbouts_files"]).strip("[]").replace("'", "").replace(" ", "").split(",")
 
     calibration_output = os.path.join(results_folder, "{}_calibration_{}.csv".format(monitor, today))
     
@@ -118,12 +123,31 @@ def calibratemonitor(job_details, settings):
 #######################################################################################################################
 
 
-# parse config file
-settings = pd.read_csv(settings_file, dtype=str)
+# # parse config file
+# settings = pd.read_csv(settings_file, dtype=str)
 
-# parse jobs list file
-jobs_df = pd.read_csv(jobs_file, dtype=str)
+# # parse jobs list file
+# jobs_df = pd.read_csv(jobs_file, dtype=str)
 
-batch_processing_hpc.batch_process_wrapper(calibratemonitor, jobs_df, settings, job_num, num_jobs, nprocs)
+# batch_processing_hpc.batch_process_wrapper(calibratemonitor, jobs_df, settings, job_num, num_jobs, nprocs)
+
+
+if __name__ == "__main__":
+    # print the time taken to run the script
+    start_time = time.time()
+    print("Script started at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))    
+
+    jobs_file = str(sys.argv[2])
+    settings_file = str(sys.argv[1])
+    # parse config file
+    settings = pd.read_csv(settings_file, dtype=str)
+
+    dictfiles = files_to_process(settings)
+    for monitor, sbfiles in dictfiles.items():
+        print("Processing monitor: {}".format(monitor))
+        calibratemonitor(settings,monitor,sbfiles)
+
+    print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    print("Time taken: {:.2f} seconds".format(time.time() - start_time))
 
 
