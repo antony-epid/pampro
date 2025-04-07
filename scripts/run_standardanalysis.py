@@ -10,23 +10,55 @@
 ## Script to calibrate data and produce statistical results
 ## pampro processing pipeline 1
 
-from datetime import timedelta
-import sys
+from datetime import timedelta, datetime
+import sys, time
 import os
 import json
 from pampro import data_loading, channel_inference, batch_processing,  batch_processing_hpc, batch_processing_future, triaxial_calibration, time_utilities, pampro_utilities, pampro_fourier, Bout, Channel
 import pandas as pd
 import numpy as np
-
-job_num = int(sys.argv[3])
-num_jobs = int(sys.argv[4])
-settings_file = str(sys.argv[1])
-jobs_file = str(sys.argv[2])
-nprocs = sys.argv[5] if len(sys.argv) == 6 else 10
+from glob import glob
 
 #######################################################################################################################
 
-def standardanalysis(job_details, settings):
+def files_to_process(settings):
+
+    func_name = "standardanalysis"
+    log_folder = settings.get("logs_folder")[0]
+    logfunc = glob.glob(log_folder + '/' + '*' + func_name  + '*.csv')
+    logfunc = [os.path.basename(file.split('_' + func_name + '_')[0]) for file in logfunc]
+    logfunc = set(logfunc)
+
+    hdf5_folder = settings.get("hdf5_folder")[0]
+    target_freq = str(settings.get("target_frequency")[0])
+    delfreq= "_{}Hz".format(target_freq)
+    hdf5files = os.listdir(hdf5_folder)
+    inpfiles = [file.strip().split('.')[0].replace(delfreq,'') for file in hdf5files] #hdf5 filename
+    inpfiles = set(inpfiles)
+
+    ofiles = list(inpfiles - logfunc)
+
+    dictclb = {} # dictionary of calibrate dataframe (one row with the value from **calibrate**log**successful**csv)
+    for file in glob.glob(os.path.join(log_folder,'*calibratemonitor*')):
+      df = pd.read_csv(file)
+      #the following line is added to deal with the situation when the calibrate monitor log contain more than one rows which are caused by the update which may be wanted when more raw files become available or have not been previously processed.
+      #the latest seems to be added into the first row
+      if df.shape[0] > 1:
+         df = df.iloc[0:1] 
+      monitor = df['monitor'][0]#without index [0], the result will be a Series
+      dictclb[monitor] = df[df.columns.difference(['monitor'])]#make monitor id as the dictionary key
+      dictclb[monitor]['calibration_date']=datetime.fromtimestamp(os.path.getmtime(file)) # add one more variable to the dict
+
+    return ofiles, dictclb
+
+
+def get_monitor_from_qc(qcfilename):
+    store = pd.read_csv(qcfilename, dtype=str)
+    monid = store['device'][0]
+    return monid
+
+#def standardanalysis(job_details, settings):
+def standardanalysis(settings, filename, pid, dictcalib):
 
     # number of iterations to be used when optimising during calibration
     num_iterations = 500
@@ -42,7 +74,17 @@ def standardanalysis(job_details, settings):
     collapse = settings.get("collapse_data")[0].strip("()'',")
     whole_file = settings.get("whole_file")[0].strip("()'',")
     temperature_calibration = settings.get("temperature_calibration")[0].strip("()'',")
-    
+
+    hdf5_folder = settings.get("hdf5_folder")[0]
+
+    target_freq = str(settings.get("target_frequency")[0])
+    delfreq= "_{}Hz".format(target_freq)
+
+    qcfile = os.path.join(results_folder, "qc_meta_" + filename + ".csv")
+    monitor = get_monitor_from_qc(qcfile)
+
+    job_details = dictcalib[monitor]
+
     # extract the multi-file calibration errors from the job details
     mf_start_error = job_details["start_error"]
     mf_end_error = job_details["end_error"]
@@ -91,13 +133,11 @@ def standardanalysis(job_details, settings):
             plotting_dict[plot_name] = "{}_{}_" + plot_name + ".png"
     
     # get job details
-    pid = str(job_details["pid"])
-    filename = str(job_details["filename"])
-    hdf5_filename = str(job_details["hdf5_filename"])
+    #pid = str(pid)    
+    #filename = str(job_details["filename"])
+    hdf5_filename = os.path.join(hdf5_folder,filename + delfreq + '.hdf5')
 
-    filename_short = os.path.basename(filename).split('.')[0]
-
-    analysis_meta = os.path.join(results_folder, "analysis_meta_{}.csv".format(filename_short))
+    analysis_meta = os.path.join(results_folder, "analysis_meta_{}.csv".format(filename))
     # check if analysis_meta already exists...
     if os.path.isfile(analysis_meta):
         os.remove(analysis_meta)
@@ -242,7 +282,7 @@ def standardanalysis(job_details, settings):
         #os.system("chgrp {} {} & chmod 770 {}".format(group, analysis_meta, analysis_meta))
           
     else:
-        results_files = [os.path.join(results_folder, "{}_{}.csv".format(name, filename_short)) for name in epoch_dict.keys()]
+        results_files = [os.path.join(results_folder, "{}_{}.csv".format(name, filename)) for name in epoch_dict.keys()]
         files = [open(file, "w") for file in results_files]
 
         # Write the column headers to the created files
@@ -331,7 +371,7 @@ def standardanalysis(job_details, settings):
                 for stat, plot in plotting_dict.items():
                     results_ts[stat].add_annotations(annotation_bouts)
                     results_ts[stat].add_annotations(exclusion_bouts)
-                    chart_file = os.path.join(plots_folder, plot.format(filename_short, name))
+                    chart_file = os.path.join(plots_folder, plot.format(filename, name))
                     results_ts.draw([[stat]], file_target=chart_file)
                     charts.append(chart_file)
 
@@ -355,12 +395,29 @@ def standardanalysis(job_details, settings):
 #######################################################################################################################
 
 
-# parse config file
-settings = pd.read_csv(settings_file, dtype=str)
+# # parse config file
+# settings = pd.read_csv(settings_file, dtype=str)
 
-# parse jobs list file
-jobs_df = pd.read_csv(jobs_file, dtype=str)
+# # parse jobs list file
+# jobs_df = pd.read_csv(jobs_file, dtype=str)
 
-batch_processing_hpc.batch_process_wrapper(standardanalysis, jobs_df, settings, job_num, num_jobs, nprocs)
+# batch_processing_hpc.batch_process_wrapper(standardanalysis, jobs_df, settings, job_num, num_jobs, nprocs)
 
+if __name__ == "__main__":
+    # print the time taken to run the script
+    start_time = time.time()
+    print("Script started at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))    
+
+    jobs_file = str(sys.argv[2])
+    settings_file = str(sys.argv[1])
+    # parse config file
+    settings = pd.read_csv(settings_file, dtype=str)
+
+    filenames, dictclb = files_to_process(settings)
+    for i, hfile in enumerate(filenames):
+        print("Processing file: {}".format(hfile))
+        standardanalysis(settings, hfile, i, dictclb)
+
+    print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    print("Time taken: {:.2f} seconds".format(time.time() - start_time))
 
