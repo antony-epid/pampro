@@ -13,9 +13,10 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import sys
+import sys, time
 import os
 from pampro import data_loading, hdf5, batch_processing, batch_processing_hpc, batch_processing_future, triaxial_calibration, pampro_fourier, Bout
+from glob import glob
 
 today = datetime.now().strftime('%d%b%Y')
 
@@ -40,12 +41,22 @@ def files_to_process(settings):
 
     ofiles = list(inpfiles - logfunc)
 
+def get_monitor_from_qc(qcfilename):
+    store = pd.read_csv(qcfilename, dtype=str)
+    monid = store['device'][0]
+    return monid
 
+#def extractstillbouts(job_details, settings):
+def extractstillbouts(settings, filename):    
 
-def extractstillbouts(job_details, settings):
+    hdf5_folder = settings.get("hdf5_folder")[0]
+    results_folder = settings.get("results_folder")[0]
+    target_freq = int(settings.get("target_frequency")[0])
+    delfreq= "_{}Hz".format(target_freq)
 
-    hdf5_filename = str(job_details["hdf5_filename"])
-    monitor = str(job_details["monitor"])
+    qcfile = os.path.join(settings['results_folder'], "qc_meta_" + filename + ".csv")
+    monitor = get_monitor_from_qc(qcfile)
+    hdf5_filename = os.path.join(hdf5_folder,filename + delfreq + '.hdf5')
 
     stillbouts_folder = settings.get("stillbouts_folder")[0]
     noise_cutoff_mg = settings.get("noise_cutoff_mg")[0]
@@ -103,5 +114,12 @@ if __name__ == "__main__":
     # parse config file
     settings = pd.read_csv(settings_file, dtype=str)
 
+    filenames = files_to_process(settings)
+    for i, hfile in enumerate(filenames):
+        print("Processing file: {}".format(hfile))
+        extractstillbouts(settings, hfile)
+
+    print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    print("Time taken: {:.2f} seconds".format(time.time() - start_time))
 
 
