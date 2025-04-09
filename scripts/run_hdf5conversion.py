@@ -12,26 +12,29 @@
 
 import sys
 import os
-from pampro import data_loading, hdf5, batch_processing, pampro_utilities, Channel, Bout, pampro_fourier, batch_processing_hpc, batch_processing_future
+from pampro import data_loading, hdf5, batch_processing, pampro_utilities, Channel, Bout, pampro_fourier
 from datetime import datetime, timedelta
 import pandas as pd
 from glob import glob
 import numpy as np
 import time
+import process_wrapper
 
 #######################################################################################################################
 
 def files_to_process(settings):
     func_name = "hdf5conversion"
     log_folder = settings.get("logs_folder")[0]
+    data_folder = settings.get("raw_data_folder")[0]
+    ext = settings.get("raw_file_extension")[0]
 
-    logfunc = glob.glob(log_folder + '/' + '*' + func_name  + '*.csv')
+    logfunc = glob(log_folder + '/' + '*' + func_name  + '*.csv')
     logfunc = [os.path.basename(file.split('_' + func_name + '_')[0]) for file in logfunc]
     logfunc = set(logfunc)
     print('the number of all procesed files : ', len(logfunc))
 
     priorfunc = "qcdiagnostics"
-    inpfiles = glob.glob(log_folder + '/' + '*' + priorfunc  + '*comp*.csv') #csv log filename  
+    inpfiles = glob(log_folder + '/' + '*' + priorfunc  + '*comp*.csv') #csv log filename  
     inpfiles = [os.path.basename(file.split('_' + priorfunc  + '_')[0]) for file in inpfiles]
     inpfiles = set(inpfiles)
     print('the number of valid files that need processing: ', len(inpfiles))
@@ -39,18 +42,27 @@ def files_to_process(settings):
     ofiles = list(inpfiles - logfunc)
     print('the number of files left : ', len(ofiles))
 
-    anomdir = settings.get("anomalies_folder")[0]
-    anomfiles = os.listdir(anomdir)
-    anomfiles = [file.split('_anomalies')[0] for file in anomfiles] 
+    if len(ofiles) > 0:
+        anomdir = settings.get("anomalies_folder")[0]
+        anomfiles = os.listdir(anomdir)
+        anom_short = [file.split('_anomalies')[0] for file in anomfiles] 
 
-    return ofiles, anomfiles
+        anomfiles = [os.path.join(anomdir, file + "_anomalies.csv") if file in anom_short else -1 for file in ofiles]
+        ofiles = [os.path.join(data_folder, x + ext) for x in ofiles]   
+
+        return zip(ofiles, anomfiles)
+    else:
+       print('No more files to process !')
+       #ofiles = None
+       return zip([],[])
 
 
 #def hdf5conversion(settings, filename, pid):
-def hdf5conversion(settings, filename_short, anomalies_file, pid):
-    pid = str(pid)
-    #filename = str(job_details["filename"])
-    #anomalies_file = str(job_details["anomalies_file"])
+#def hdf5conversion(settings, filename_short, anomalies_file, pid):
+def hdf5conversion(settings, **kwargs):    
+    pid = str(kwargs['pid'])
+    filename = str(kwargs["filename"])
+    anomalies_file = str(kwargs["anomalies_file"])
 
     data_folder = settings.get("raw_data_folder")[0]
     ext = settings.get("raw_file_extension")[0]
@@ -58,10 +70,10 @@ def hdf5conversion(settings, filename_short, anomalies_file, pid):
     hdf5_folder = settings.get("hdf5_folder")[0]
     results_folder = settings.get("results_folder")[0]
     target_freq = int(settings.get("target_frequency")[0])
+    filename_short = os.path.basename(filename).split('.')[0]
     meta_output = os.path.join(results_folder, "file_meta{}.csv".format(filename_short))
 
-    filename_short = os.path.basename(filename).split('.')[0]
-    filename = os.path.join(data_folder,filename_short + ext)
+    #filename = os.path.join(data_folder,filename_short + ext)
 
     hdf5_filename = os.path.join(hdf5_folder, "{}_{}Hz{}".format(filename_short, target_freq, ".hdf5"))
     
@@ -222,24 +234,25 @@ def hdf5conversion(settings, filename_short, anomalies_file, pid):
 if __name__ == "__main__":
 
     settings_file = str(sys.argv[1])
-    jobs_file = str(sys.argv[2])
+    #jobs_file = str(sys.argv[2])
 
     # print the time taken to run the script
     start_time = time.time()
     print("Script started at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))    
 
     settings = pd.read_csv(settings_file, dtype=str)
-    rawfiles, anomfiles = files_to_process(settings)
-    anomdir = settings.get("anomalies_folder")[0]
+    zip_raw_anom = files_to_process(settings)
+    #anomdir = settings.get("anomalies_folder")[0]
 
-    for i, rawfile in enumerate(rawfiles):
+    for i, (rawfile, anom_file) in enumerate(zip_raw_anom):
         print("Processing file: {}".format(rawfile))
-        if rawfile in anomfiles:
-            anomalies_file = os.path.join(anomdir, rawfile + "_anomalies.csv")
-        else:
-            anomalies_file = -1
+        # if rawfile in anomfiles:
+        #     anomalies_file = os.path.join(anomdir, rawfile + "_anomalies.csv")
+        # else:
+        #     anomalies_file = -1
 
-        hdf5conversion(settings, rawfile, anomalies_file, i)
+        #hdf5conversion(settings, rawfile, anomalies_file, i)
+        process_wrapper.wrap_task(hdf5conversion,settings,filename=rawfile, anomalies_file=anom_file, pid=str(i))
 
     print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     print("Time taken: {:.2f} seconds".format(time.time() - start_time))

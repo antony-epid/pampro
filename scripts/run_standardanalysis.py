@@ -14,10 +14,11 @@ from datetime import timedelta, datetime
 import sys, time
 import os
 import json
-from pampro import data_loading, channel_inference, batch_processing,  batch_processing_hpc, batch_processing_future, triaxial_calibration, time_utilities, pampro_utilities, pampro_fourier, Bout, Channel
+from pampro import data_loading, channel_inference, batch_processing, triaxial_calibration, time_utilities, pampro_utilities, pampro_fourier, Bout, Channel
 import pandas as pd
 import numpy as np
 from glob import glob
+import process_wrapper
 
 #######################################################################################################################
 
@@ -25,10 +26,11 @@ def files_to_process(settings):
 
     func_name = "standardanalysis"
     log_folder = settings.get("logs_folder")[0]
-    logfunc = glob.glob(log_folder + '/' + '*' + func_name  + '*.csv')
+    logfunc = glob(log_folder + '/' + '*' + func_name  + '*.csv')
     logfunc = [os.path.basename(file.split('_' + func_name + '_')[0]) for file in logfunc]
     logfunc = set(logfunc)
 
+    results_folder = settings.get("results_folder")[0]
     hdf5_folder = settings.get("hdf5_folder")[0]
     target_freq = str(settings.get("target_frequency")[0])
     delfreq= "_{}Hz".format(target_freq)
@@ -38,18 +40,28 @@ def files_to_process(settings):
 
     ofiles = list(inpfiles - logfunc)
 
+    list_hdf5_files = []
+    list_monitors = [] # the list of monitor which correspond to the order of ofiles
+    for filename in ofiles:
+        qcfile = os.path.join(results_folder, "qc_meta_" + filename + ".csv")
+        list_monitors.append(get_monitor_from_qc(qcfile))
+        list_hdf5_files.append(os.path.join(hdf5_folder,filename + delfreq + '.hdf5'))
+
     dictclb = {} # dictionary of calibrate dataframe (one row with the value from **calibrate**log**successful**csv)
-    for file in glob.glob(os.path.join(log_folder,'*calibratemonitor*')):
+
+    for file in glob(os.path.join(log_folder,'*calibratemonitor*')):
       df = pd.read_csv(file)
       #the following line is added to deal with the situation when the calibrate monitor log contain more than one rows which are caused by the update which may be wanted when more raw files become available or have not been previously processed.
       #the latest seems to be added into the first row
       if df.shape[0] > 1:
          df = df.iloc[0:1] 
-      monitor = df['monitor'][0]#without index [0], the result will be a Series
+      #monitor = df['monitor'][0]#without index [0], the result will be a Series
+      monitor = str(df['monitor'][0])#without index [0], the result will be a Series
+
       dictclb[monitor] = df[df.columns.difference(['monitor'])]#make monitor id as the dictionary key
       dictclb[monitor]['calibration_date']=datetime.fromtimestamp(os.path.getmtime(file)) # add one more variable to the dict
 
-    return ofiles, dictclb
+    return zip(ofiles, list_hdf5_files, list_monitors), dictclb
 
 
 def get_monitor_from_qc(qcfilename):
@@ -58,7 +70,8 @@ def get_monitor_from_qc(qcfilename):
     return monid
 
 #def standardanalysis(job_details, settings):
-def standardanalysis(settings, filename, pid, dictcalib):
+#def standardanalysis(settings, dictcalib, filename, pid):
+def standardanalysis(settings, **kwargs):
 
     # number of iterations to be used when optimising during calibration
     num_iterations = 500
@@ -80,10 +93,9 @@ def standardanalysis(settings, filename, pid, dictcalib):
     target_freq = str(settings.get("target_frequency")[0])
     delfreq= "_{}Hz".format(target_freq)
 
-    qcfile = os.path.join(results_folder, "qc_meta_" + filename + ".csv")
-    monitor = get_monitor_from_qc(qcfile)
-
-    job_details = dictcalib[monitor]
+    #qcfile = os.path.join(results_folder, "qc_meta_" + filename + ".csv")
+    #monitor = get_monitor_from_qc(qcfile)
+    job_details = kwargs
 
     # extract the multi-file calibration errors from the job details
     mf_start_error = job_details["start_error"]
@@ -133,9 +145,10 @@ def standardanalysis(settings, filename, pid, dictcalib):
             plotting_dict[plot_name] = "{}_{}_" + plot_name + ".png"
     
     # get job details
-    #pid = str(pid)    
-    #filename = str(job_details["filename"])
-    hdf5_filename = os.path.join(hdf5_folder,filename + delfreq + '.hdf5')
+    pid = str(job_details['pid'])    
+    filename = str(job_details["filename"])
+    #hdf5_filename = os.path.join(hdf5_folder,filename + delfreq + '.hdf5')
+    hdf5_filename = str(job_details["hdf5_filename"]) 
 
     analysis_meta = os.path.join(results_folder, "analysis_meta_{}.csv".format(filename))
     # check if analysis_meta already exists...
@@ -408,16 +421,16 @@ if __name__ == "__main__":
     start_time = time.time()
     print("Script started at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))    
 
-    jobs_file = str(sys.argv[2])
+    #jobs_file = str(sys.argv[2])
     settings_file = str(sys.argv[1])
     # parse config file
     settings = pd.read_csv(settings_file, dtype=str)
 
-    filenames, dictclb = files_to_process(settings)
-    for i, hfile in enumerate(filenames):
+    zip_file_hdf_mon, dictclb = files_to_process(settings)
+    for i, (flnm, hfile, mon) in enumerate(zip_file_hdf_mon):  
         print("Processing file: {}".format(hfile))
-        standardanalysis(settings, hfile, i, dictclb)
-
+        #standardanalysis(settings, hfile, i, dictclb)
+        process_wrapper.wrap_task(standardanalysis, settings, **dictclb[mon], filename=flnm, hdf5_filename=hfile, monitor=mon, pid=str(i))
     print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     print("Time taken: {:.2f} seconds".format(time.time() - start_time))
 

@@ -18,6 +18,7 @@ from pampro import data_loading, diagnostics, Time_Series, Channel, hdf5, channe
 from collections import OrderedDict
 import pandas as pd
 from glob import glob
+import process_wrapper 
 
 #######################################################################################################################
 
@@ -41,10 +42,11 @@ def files_to_process(settings):
     log_folder = settings.get("logs_folder")[0]
     data_folder = settings.get("raw_data_folder")[0]
     ext = settings.get("raw_file_extension")[0]
-    logfunc = glob.glob(log_folder + '/' + '*' + func_name  + '*.csv')
+    logfunc = glob(log_folder + '/' + '*' + func_name  + '*.csv')
     logfunc = [os.path.basename(file.split('_' + func_name + '_')[0]) for file in logfunc]
     logfunc = set(logfunc)
-    datafiles = glob.glob(data_folder + '/*' + ext) #raw file *.cwa filename
+    datafiles = glob(data_folder + '/*' + ext) #raw file *.cwa filename
+    datafiles = [os.path.basename(file.split(ext)[0]) for file in datafiles]
     inpfiles = set(datafiles)
     ofiles = list(inpfiles - logfunc)
 
@@ -56,18 +58,21 @@ def files_to_process(settings):
         os.makedirs(config_folder, exist_ok=True)
 
     if len(ofiles) > 0:
-         ofiles = [os.path.join(data_folder, x + ext) for x in ofiles]
+       ofiles = [os.path.join(data_folder, x + ext) for x in ofiles]
     else:
-      print('No more files to process !')
-      ofiles = None
+       print('No more files to process !')
+       ofiles = None
 
+    #if not ofiles:
+    #   print('No more files to process !')        
     return ofiles
 
 
-def qcdiagnostics(settings, filename, pid):
+#def qcdiagnostics(settings, filename, pid):
+def qcdiagnostics(settings, **kwargs):    
 
-    pid = str(pid)
-    filename = str(filename)
+    pid = str(kwargs['pid'])
+    filename = str(kwargs['filename'])
     filename_short = os.path.basename(filename).split('.')[0]
 
     monitor_type = settings.get("monitor_type")[0]
@@ -270,7 +275,8 @@ if __name__ == "__main__":
     rawfiles = files_to_process(settings)
     for i, rawfile in enumerate(rawfiles):
         print("Processing file: {}".format(rawfile))
-        qcdiagnostics(settings, rawfile, i)
-
+        #-------------coba yg ini --------
+        process_wrapper.wrap_task(qcdiagnostics, settings, filename=rawfile, pid=str(i))
+    
     print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    print("Time taken: {:.2f} seconds".format(time.time() - start_time))
+    print("Total Time taken: {:.2f} seconds".format(time.time() - start_time))

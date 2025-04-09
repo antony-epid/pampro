@@ -14,8 +14,9 @@ from datetime import datetime
 import pandas as pd
 import sys, time
 import os
-from pampro import data_loading, batch_processing, batch_processing_hpc, batch_processing_future, triaxial_calibration, pampro_utilities
+from pampro import data_loading, batch_processing, triaxial_calibration, pampro_utilities
 from collections import OrderedDict, defaultdict
+import process_wrapper
 
 today = datetime.now().strftime('%d%b%Y')
 
@@ -35,10 +36,11 @@ def files_to_process(settings):
     return dictmon
 
 #def calibratemonitor(job_details, settings):
-def calibratemonitor(settings,monitor, files):    
-
+#def calibratemonitor(settings, files, monitor, pid):    
+def calibratemonitor(settings, **kwargs):
     results_folder = settings.get("results_folder")[0]
     #monitor = job_details["monitor_id"]
+    monitor = kwargs["monitor_id"]
     #files = (job_details["stillbouts_files"]).strip("[]").replace("'", "").replace(" ", "").split(",")
 
     calibration_output = os.path.join(results_folder, "{}_calibration_{}.csv".format(monitor, today))
@@ -52,6 +54,7 @@ def calibratemonitor(settings,monitor, files):
     # flag to indicate the first file processed
     first_file = True
 
+    files = kwargs['stillbouts_files']
     for f in files:
 
         # check that the filepath 'exists':
@@ -137,15 +140,18 @@ if __name__ == "__main__":
     start_time = time.time()
     print("Script started at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))    
 
-    jobs_file = str(sys.argv[2])
+    #jobs_file = str(sys.argv[2])
     settings_file = str(sys.argv[1])
     # parse config file
     settings = pd.read_csv(settings_file, dtype=str)
 
     dictfiles = files_to_process(settings)
-    for monitor, sbfiles in dictfiles.items():
+    if not dictfiles:
+        print("No monitor to process !!!")
+    for i, (monitor, sbfiles) in enumerate(dictfiles.items()):
         print("Processing monitor: {}".format(monitor))
-        calibratemonitor(settings,monitor,sbfiles)
+        #calibratemonitor(settings,sbfiles, monitor)
+        process_wrapper.wrap_task(calibratemonitor, settings, stillbouts_files=sbfiles, monitor_id=str(monitor), pid=str(i))
 
     print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     print("Time taken: {:.2f} seconds".format(time.time() - start_time))

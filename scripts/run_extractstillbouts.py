@@ -15,8 +15,9 @@ import numpy as np
 from datetime import datetime, timedelta
 import sys, time
 import os
-from pampro import data_loading, hdf5, batch_processing, batch_processing_hpc, batch_processing_future, triaxial_calibration, pampro_fourier, Bout
+from pampro import data_loading, hdf5, batch_processing, triaxial_calibration, pampro_fourier, Bout
 from glob import glob
+import process_wrapper
 
 today = datetime.now().strftime('%d%b%Y')
 
@@ -27,8 +28,9 @@ def files_to_process(settings):
     hdf5_folder = settings.get("hdf5_folder")[0]
     results_folder = settings.get("results_folder")[0]
     log_folder = settings.get("logs_folder")[0]
+    data_folder = settings.get("raw_data_folder")[0]    
     ext = settings.get("raw_file_extension")[0]
-    logfunc = glob.glob(log_folder + '/' + '*' + func_name  + '*.csv')
+    logfunc = glob(log_folder + '/' + '*' + func_name  + '*.csv')
     logfunc = [os.path.basename(file.split('_' + func_name + '_')[0]) for file in logfunc]
     logfunc = set(logfunc)
 
@@ -40,23 +42,40 @@ def files_to_process(settings):
     inpfiles = set(inpfiles)
 
     ofiles = list(inpfiles - logfunc)
+    list_hdf5_files = []
+    list_monitors = []
+    list_raw_files = []
+    if ofiles:
+        for filename in ofiles:
+            qcfile = os.path.join(results_folder, "qc_meta_" + filename + ".csv")
+            list_monitors.append(get_monitor_from_qc(qcfile))
+            list_raw_files.append(os.path.join(data_folder,filename + ext))
+            list_hdf5_files.append(os.path.join(hdf5_folder,filename + delfreq + '.hdf5'))
+    else:
+        print("No more files to process")
+    return zip(list_raw_files, list_hdf5_files, list_monitors)
 
+    
 def get_monitor_from_qc(qcfilename):
     store = pd.read_csv(qcfilename, dtype=str)
     monid = store['device'][0]
     return monid
 
 #def extractstillbouts(job_details, settings):
-def extractstillbouts(settings, filename):    
+#def extractstillbouts(settings, filename):    
+def extractstillbouts(settings, **kwargs):    
 
     hdf5_folder = settings.get("hdf5_folder")[0]
     results_folder = settings.get("results_folder")[0]
     target_freq = int(settings.get("target_frequency")[0])
     delfreq= "_{}Hz".format(target_freq)
 
-    qcfile = os.path.join(settings['results_folder'], "qc_meta_" + filename + ".csv")
-    monitor = get_monitor_from_qc(qcfile)
-    hdf5_filename = os.path.join(hdf5_folder,filename + delfreq + '.hdf5')
+    #qcfile = os.path.join(settings['results_folder'], "qc_meta_" + filename + ".csv")
+    #monitor = get_monitor_from_qc(qcfile)
+    #hdf5_filename = os.path.join(hdf5_folder,filename + delfreq + '.hdf5')
+    #filename = kwargs['filename']
+    hdf5_filename= kwargs['hdf5_filename']
+    monitor = kwargs['monitor']
 
     stillbouts_folder = settings.get("stillbouts_folder")[0]
     noise_cutoff_mg = settings.get("noise_cutoff_mg")[0]
@@ -109,15 +128,17 @@ if __name__ == "__main__":
     print("Script started at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))    
 
     settings_file = str(sys.argv[1])
-    jobs_file = str(sys.argv[2])
+    #jobs_file = str(sys.argv[2])
 
     # parse config file
     settings = pd.read_csv(settings_file, dtype=str)
 
-    filenames = files_to_process(settings)
-    for i, hfile in enumerate(filenames):
+    zip_file_hdf_mon = files_to_process(settings)
+    #return ofiles, list_hdf5_files, list_monitors
+    for i, (flnm, hfile, mon) in enumerate(zip_file_hdf_mon):
         print("Processing file: {}".format(hfile))
-        extractstillbouts(settings, hfile)
+        #extractstillbouts(settings, hfile)
+        process_wrapper.wrap_task(extractstillbouts,settings,filename=flnm,hdf5_filename=hfile,monitor=mon,pid=str(i))
 
     print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     print("Time taken: {:.2f} seconds".format(time.time() - start_time))
