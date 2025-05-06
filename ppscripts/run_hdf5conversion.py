@@ -12,13 +12,13 @@
 
 import sys
 import os
-from pampro import data_loading, hdf5, batch_processing, pampro_utilities, Channel, Bout, pampro_fourier
+from pampro import data_loading, hdf5, pampro_utilities, Channel, Bout, pampro_fourier
 from datetime import datetime, timedelta
 import pandas as pd
 from glob import glob
 import numpy as np
 import time
-import process_wrapper
+from ppscripts import process_wrapper
 
 #######################################################################################################################
 
@@ -57,8 +57,6 @@ def files_to_process(settings):
        return zip([],[])
 
 
-#def hdf5conversion(settings, filename, pid):
-#def hdf5conversion(settings, filename_short, anomalies_file, pid):
 def hdf5conversion(settings, **kwargs):    
     pid = str(kwargs['pid'])
     filename = str(kwargs["filename"])
@@ -72,8 +70,6 @@ def hdf5conversion(settings, **kwargs):
     target_freq = int(settings.get("target_frequency")[0])
     filename_short = os.path.basename(filename).split('.')[0]
     meta_output = os.path.join(results_folder, "file_meta{}.csv".format(filename_short))
-
-    #filename = os.path.join(data_folder,filename_short + ext)
 
     hdf5_filename = os.path.join(hdf5_folder, "{}_{}Hz{}".format(filename_short, target_freq, ".hdf5"))
     
@@ -219,23 +215,9 @@ def hdf5conversion(settings, **kwargs):
 
     return {"hdf5_file": hdf5_filename, "file_meta_results": meta_output}
 
-#######################################################################################################################
 
-
-# # parse config file
-# settings = pd.read_csv(settings_file, dtype=str)
-
-# # parse jobs list file
-# jobs_df = pd.read_csv(jobs_file, dtype=str)
-
-# batch_processing_hpc.batch_process_wrapper(hdf5conversion, jobs_df, settings, job_num, num_jobs, nprocs)
-
-
-if __name__ == "__main__":
-
+def main():
     settings_file = str(sys.argv[1])
-    #jobs_file = str(sys.argv[2])
-
     # print the time taken to run the script
     start_time = time.time()
     print("Script started at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))    
@@ -246,14 +228,15 @@ if __name__ == "__main__":
 
     for i, (rawfile, anom_file) in enumerate(zip_raw_anom):
         print("Processing file: {}".format(rawfile))
-        # if rawfile in anomfiles:
-        #     anomalies_file = os.path.join(anomdir, rawfile + "_anomalies.csv")
-        # else:
-        #     anomalies_file = -1
-
         #hdf5conversion(settings, rawfile, anomalies_file, i)
         process_wrapper.wrap_task(hdf5conversion,settings,filename=rawfile, anomalies_file=anom_file, pid=str(i))
 
     print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     print("Time taken: {:.2f} seconds".format(time.time() - start_time))
+
+#######################################################################################################################
+
+
+if __name__ == "__main__":
+   main()
 

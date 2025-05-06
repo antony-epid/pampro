@@ -11,8 +11,8 @@ import os
 from setuptools import setup
 
 setup(
-    name="pampro",
-    packages=["pampro"],
+    name="pampro-pp",
+    packages=["pampro","ppscripts"],
     version="0.5.2.2",
     author="Philip Cameron",
     author_email="pa-tech-support@mrc-epid.cam.ac.uk",
@@ -22,6 +22,16 @@ setup(
     description=("physical activity monitor processing"),
     url="https://github.com/MRC-Epid/pampro",
     install_requires=['numpy>=1.14.0', 'scipy>=1.1.0', 'matplotlib>=2.2.2', 'h5py>=2.9.0', 'pandas>=0.23.0', 'statsmodels>=0.9.0', 'uos_activpal>=0.2.2', 'numba>=0.45'],
+    entry_points={
+        'console_scripts': [
+            'run_qcdiagnostics=ppscripts.run_qcdiagnostics:main',
+            'run_hdf5conversion=ppscripts.run_hdf5conversion:main',
+            'run_extractstillbouts=ppscripts.run_extractstillbouts:main',
+            'run_calibratemonitor=ppscripts.run_calibratemonitor:main',
+            'run_standardanalysis=ppscripts.run_standardanalysis:main',
+        ],
+    },
+    scripts=['ppscripts/init_proj.sh'],
     Classifiers=[
         "Intended Audience :: Science/Research",
         "Operating System :: Microsoft :: Windows :: Windows 7",

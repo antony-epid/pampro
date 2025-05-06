@@ -14,9 +14,9 @@ from datetime import datetime
 import pandas as pd
 import sys, time
 import os
-from pampro import data_loading, batch_processing, triaxial_calibration, pampro_utilities
+from pampro import data_loading, triaxial_calibration, pampro_utilities
 from collections import OrderedDict, defaultdict
-import process_wrapper
+from ppscripts import process_wrapper
 
 today = datetime.now().strftime('%d%b%Y')
 
@@ -31,12 +31,9 @@ def files_to_process(settings):
     for file in sbfiles:
         keymon = os.path.basename(file).split('_')[0]
         dictmon[keymon].append(file)
-    #listmon = dictmon.keys()
-    #listsb = [dictmon[key] for key in listmon] #dictmon.keys() may not always follow the same order as dictmon.values()
     return dictmon
 
-#def calibratemonitor(job_details, settings):
-#def calibratemonitor(settings, files, monitor, pid):    
+
 def calibratemonitor(settings, **kwargs):
     results_folder = settings.get("results_folder")[0]
     #monitor = job_details["monitor_id"]
@@ -123,19 +120,8 @@ def calibratemonitor(settings, **kwargs):
 
     return calibration_diagnostics
 
-#######################################################################################################################
 
-
-# # parse config file
-# settings = pd.read_csv(settings_file, dtype=str)
-
-# # parse jobs list file
-# jobs_df = pd.read_csv(jobs_file, dtype=str)
-
-# batch_processing_hpc.batch_process_wrapper(calibratemonitor, jobs_df, settings, job_num, num_jobs, nprocs)
-
-
-if __name__ == "__main__":
+def main():
     # print the time taken to run the script
     start_time = time.time()
     print("Script started at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))    
@@ -156,4 +142,10 @@ if __name__ == "__main__":
     print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     print("Time taken: {:.2f} seconds".format(time.time() - start_time))
 
+
+#######################################################################################################################
+
+
+if __name__ == "__main__":
+   main()
 

@@ -15,9 +15,9 @@ import numpy as np
 from datetime import datetime, timedelta
 import sys, time
 import os
-from pampro import data_loading, hdf5, batch_processing, triaxial_calibration, pampro_fourier, Bout
+from pampro import data_loading, hdf5, triaxial_calibration, pampro_fourier, Bout
 from glob import glob
-import process_wrapper
+from ppscripts import process_wrapper
 
 today = datetime.now().strftime('%d%b%Y')
 
@@ -61,19 +61,12 @@ def get_monitor_from_qc(qcfilename):
     monid = store['device'][0]
     return monid
 
-#def extractstillbouts(job_details, settings):
-#def extractstillbouts(settings, filename):    
 def extractstillbouts(settings, **kwargs):    
-
     hdf5_folder = settings.get("hdf5_folder")[0]
     results_folder = settings.get("results_folder")[0]
     target_freq = int(settings.get("target_frequency")[0])
     delfreq= "_{}Hz".format(target_freq)
 
-    #qcfile = os.path.join(settings['results_folder'], "qc_meta_" + filename + ".csv")
-    #monitor = get_monitor_from_qc(qcfile)
-    #hdf5_filename = os.path.join(hdf5_folder,filename + delfreq + '.hdf5')
-    #filename = kwargs['filename']
     hdf5_filename= kwargs['hdf5_filename']
     monitor = kwargs['monitor']
 
@@ -110,19 +103,8 @@ def extractstillbouts(settings, **kwargs):
 
     return {"still_bouts_file": hdf5_stillbouts, "monitor_num": monitor}
 
-#######################################################################################################################
 
-
-# # parse config file
-# settings = pd.read_csv(settings_file, dtype=str)
-
-# # parse jobs list file
-# jobs_df = pd.read_csv(jobs_file, dtype=str)
-
-# batch_processing_hpc.batch_process_wrapper(extractstillbouts, jobs_df, settings, job_num, num_jobs, nprocs)
-
-
-if __name__ == "__main__":
+def main():
     # print the time taken to run the script
     start_time = time.time()
     print("Script started at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))    
@@ -143,4 +125,8 @@ if __name__ == "__main__":
     print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     print("Time taken: {:.2f} seconds".format(time.time() - start_time))
 
+#######################################################################################################################
 
+
+if __name__ == "__main__":
+   main()

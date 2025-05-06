@@ -14,11 +14,11 @@ import numpy as np
 from datetime import datetime, timedelta
 import time
 import sys, os
-from pampro import data_loading, diagnostics, Time_Series, Channel, hdf5, channel_inference, Bout, Bout_Collection, batch_processing, triaxial_calibration, time_utilities, pampro_utilities, pampro_fourier
+from pampro import data_loading, diagnostics, Time_Series, Channel, hdf5, channel_inference, Bout, Bout_Collection, triaxial_calibration, time_utilities, pampro_utilities, pampro_fourier
 from collections import OrderedDict
 import pandas as pd
 from glob import glob
-import process_wrapper 
+from ppscripts import process_wrapper
 
 #######################################################################################################################
 
@@ -253,17 +253,8 @@ def qcdiagnostics(settings, **kwargs):
     
     return {"anomalies_file": anomalies_file, "qc_results": qc_output, "qc_visualisation": qc_plots, "monitor": header["device"]}
 
-#######################################################################################################################
 
-# # parse config file
-# settings = pd.read_csv(settings_file, dtype=str)
-# # parse jobs list file
-# jobs_df = pd.read_csv(jobs_file, dtype=str)
-
-# # initiate batch process
-# batch_processing.batch_process_wrapper(qcdiagnostics, jobs_df, settings, job_num, num_jobs)
-
-if __name__ == "__main__":
+def main():
     # print the time taken to run the script
     start_time = time.time()
     print("Script started at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))    
@@ -275,8 +266,13 @@ if __name__ == "__main__":
     rawfiles = files_to_process(settings)
     for i, rawfile in enumerate(rawfiles):
         print("Processing file: {}".format(rawfile))
-        #-------------coba yg ini --------
         process_wrapper.wrap_task(qcdiagnostics, settings, filename=rawfile, pid=str(i))
     
     print("Script finished at: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     print("Total Time taken: {:.2f} seconds".format(time.time() - start_time))
+
+
+#######################################################################################################################
+
+if __name__ == "__main__":
+   main()
